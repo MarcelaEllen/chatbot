@@ -1,12 +1,11 @@
 import customtkinter as ctk
 import requests
-import csv
-from io import StringIO
+from bs4 import BeautifulSoup
 
-class NutriBot:
+class Chatbot:
     def __init__(self, master):
         self.master = master
-        master.title("NutriBot")
+        master.title("Artemis")
         master.geometry("600x500")
 
         # Configuração da janela
@@ -21,7 +20,7 @@ class NutriBot:
         # Área de texto
         self.text_area = ctk.CTkTextbox(master, width=500, height=300, wrap="word")
         self.text_area.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
-        self.text_area.insert(ctk.END, "Olá! Eu sou o NutriBot. Como posso te ajudar com suas dúvidas nutricionais?\n")
+        self.text_area.insert(ctk.END, "Olá! Eu sou a Artemis, sua nutri virtual. Me diga um alimento para que eu te informe a sua composição!\n")
         self.text_area.configure(state="disabled")  # Apenas leitura na área de texto
 
         # Campo de entrada
@@ -30,7 +29,7 @@ class NutriBot:
         self.entry.bind("<Return>", self.process_input)
 
         # Botão de envio
-        self.send_button = ctk.CTkButton(master, text="Enviar", fg_color="green", command=self.process_input)
+        self.send_button = ctk.CTkButton(master, text="Enviar", fg_color="blue", command=self.process_input)
         self.send_button.grid(row=2, column=0, padx=20, pady=10)
 
     def process_input(self, event=None):
@@ -46,38 +45,33 @@ class NutriBot:
         response = self.get_response(user_input)
 
         self.text_area.configure(state="normal")
-        self.text_area.insert(ctk.END, "NutriBot: " + response + "\n")
+        self.text_area.insert(ctk.END, "Artemis: " + response + "\n")
         self.text_area.configure(state="disabled")
         self.entry.delete(0, ctk.END)
 
     def get_response(self, user_input):
-        # URL para o CSV exportado da planilha pública do Google Sheets
-        sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQnLPXBywPKV-99eANe7PzzVMuNBjzX_QWsMG-br21wC2VkwCl67pl6-xbfwgza0A0FK3hkCiqJeki/pub?output=csv"
-
+        # Consultar a tabela do Google Sheets
         try:
-            # Fazer a requisição para a URL do Google Sheets em formato CSV
-            response = requests.get(sheet_url)
+            response = requests.get("https://docs.google.com/spreadsheets/d/e/2PACX-1vQQnLPXBywPKV-99eANe7PzzVMuNBjzX_QWsMG-br21wC2VkwCl67pl6-xbfwgza0A0FK3hkCiqJeki/pubhtml?gid=0&single=true")
             if response.status_code == 200:
-                csv_data = response.text
-
-                # Processar o conteúdo CSV
-                csv_reader = csv.reader(StringIO(csv_data))
-                next(csv_reader)  # Pular o cabeçalho da tabela
+                soup = BeautifulSoup(response.text, 'html.parser')
+                rows = soup.find_all('tr')
 
                 # Procurar o alimento na tabela
-                for row in csv_reader:
-                    nome = row[0].strip().lower()
-                    if nome == user_input.lower():
-                        calorias = row[1]
-                        proteinas = row[2]
-                        carboidratos = row[3]
-                        gorduras = row[4]
-                        return (f"{nome.capitalize()}:\n"
+                for row in rows[1:]:  # Pular o cabeçalho
+                    cells = row.find_all('td')
+                    alimento = cells[0].get_text().strip()
+                    if alimento.lower() == user_input.lower():
+                        calorias = cells[1].get_text().strip()
+                        proteinas = cells[2].get_text().strip()
+                        carboidratos = cells[3].get_text().strip()
+                        gorduras = cells[4].get_text().strip()
+                        return (f"Alimento: {alimento}\n"
                                 f"Calorias: {calorias} kcal\n"
                                 f"Proteínas: {proteinas} g\n"
                                 f"Carboidratos: {carboidratos} g\n"
                                 f"Gorduras: {gorduras} g")
-                return "Desculpe, não encontrei informações sobre esse alimento. Tente outro."
+                return "Alimento não encontrado. Por favor, verifique o nome e tente novamente."
             else:
                 return "Desculpe, não consegui acessar a tabela no momento."
         except requests.exceptions.RequestException as e:
@@ -85,5 +79,5 @@ class NutriBot:
 
 if __name__ == "__main__":
     root = ctk.CTk()
-    nutri_bot = NutriBot(root)
+    chatbot = Chatbot(root)
     root.mainloop()
