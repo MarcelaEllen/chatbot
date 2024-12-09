@@ -1,6 +1,10 @@
 import customtkinter as ctk
 import requests
 from bs4 import BeautifulSoup
+import spacy
+from difflib import SequenceMatcher
+
+nlp = spacy.load('pt_core_news_sm')
 
 class Chatbot:
     def __init__(self, master):
@@ -50,27 +54,56 @@ class Chatbot:
         self.entry.delete(0, ctk.END)
 
     def get_response(self, user_input):
-        # Consultar a tabela do Google Sheets
+        # Consultar a tabela
         try:
             response = requests.get("https://docs.google.com/spreadsheets/d/e/2PACX-1vQQnLPXBywPKV-99eANe7PzzVMuNBjzX_QWsMG-br21wC2VkwCl67pl6-xbfwgza0A0FK3hkCiqJeki/pubhtml?gid=0&single=true")
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 rows = soup.find_all('tr')
 
-                # Procurar o alimento na tabela
+                # Criar uma lista de alimentos e seus dados
+                alimentos = {}
                 for row in rows[1:]:  # Pular o cabeçalho
                     cells = row.find_all('td')
                     alimento = cells[0].get_text().strip()
-                    if alimento.lower() == user_input.lower():
-                        calorias = cells[1].get_text().strip()
-                        proteinas = cells[2].get_text().strip()
-                        carboidratos = cells[3].get_text().strip()
-                        gorduras = cells[4].get_text().strip()
-                        return (f"Alimento: {alimento}\n"
+                    calorias = cells[1].get_text().strip()
+                    proteinas = cells[2].get_text().strip()
+                    carboidratos = cells[3].get_text().strip()
+                    gorduras = cells[4].get_text().strip()
+                    alimentos[alimento.lower()] = (calorias, proteinas, carboidratos, gorduras)
+
+                # Processar o input com spaCy
+                doc = nlp(user_input.lower())
+                tokens = [token.text for token in doc if not token.is_stop and not token.is_punct]
+
+                # Verificar correspondência exata
+                for token in tokens:
+                    if token in alimentos:
+                        calorias, proteinas, carboidratos, gorduras = alimentos[token]
+                        return (f"Alimento: {token.capitalize()}\n"
                                 f"Calorias: {calorias} kcal\n"
                                 f"Proteínas: {proteinas} g\n"
                                 f"Carboidratos: {carboidratos} g\n"
                                 f"Gorduras: {gorduras} g")
+
+                # Buscar correspondência por similaridade
+                melhor_correspondencia = None
+                maior_similaridade = 0
+                for alimento in alimentos.keys():
+                    for token in tokens:
+                        similaridade = SequenceMatcher(None, token, alimento).ratio()
+                        if similaridade > maior_similaridade:
+                            maior_similaridade = similaridade
+                            melhor_correspondencia = alimento
+
+                if maior_similaridade > 0.8:  # Limite de similaridade para sugestões
+                    calorias, proteinas, carboidratos, gorduras = alimentos[melhor_correspondencia]
+                    return (f"Você quis dizer '{melhor_correspondencia.capitalize()}'?\n"
+                            f"Calorias: {calorias} kcal\n"
+                            f"Proteínas: {proteinas} g\n"
+                            f"Carboidratos: {carboidratos} g\n"
+                            f"Gorduras: {gorduras} g")
+
                 return "Alimento não encontrado. Por favor, verifique o nome e tente novamente."
             else:
                 return "Desculpe, não consegui acessar a tabela no momento."
